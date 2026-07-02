@@ -109,13 +109,13 @@ def print_key_summary(summary_rows: List[Dict[str, object]]) -> None:
     def get(variant: str, rep: str, metric: str) -> float:
         return float(by_key.get((variant, rep), {}).get(metric, np.nan))
     static_auroc = get("static_only", "static_patient_level", "test_auroc_mean")
-    hrv_static_auroc = get("hrv_static", "static_plus_hrv_q88", "test_auroc_mean")
+    hrv_static_auroc = get("hrv_static", f"static_plus_hrv_{PATIENT_POOLING_TAG}", "test_auroc_mean")
     semantic_static_auroc = get("statement71_static", "static_plus_statement71", "test_auroc_mean")
-    semantic_hrv_static_auroc = get("statement71_hrv_static", "static_hrv_q88_statement71", "test_auroc_mean")
+    semantic_hrv_static_auroc = get("statement71_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_statement71", "test_auroc_mean")
     semantic_rep = f"{SEMANTIC_FEATURE_NAME}_wvnum{WVNUM}_{ENTRY_STATEMENT_AGG_MODE}_patient_{PATIENT_ENTRY_AGG_MODE}"
     print("\n=== PTBXL71 statement semantic key comparisons ===")
     print(f"static_only              : AUROC={static_auroc:.4f}, AUPRC={get('static_only', 'static_patient_level', 'test_auprc_mean'):.4f}")
-    print(f"hrv_only                 : AUROC={get('hrv_only', 'hrv_q88', 'test_auroc_mean'):.4f}, AUPRC={get('hrv_only', 'hrv_q88', 'test_auprc_mean'):.4f}")
+    print(f"hrv_only                 : AUROC={get('hrv_only', f'hrv_{PATIENT_POOLING_TAG}', 'test_auroc_mean'):.4f}, AUPRC={get('hrv_only', f'hrv_{PATIENT_POOLING_TAG}', 'test_auprc_mean'):.4f}")
     print(f"statement71_only         : AUROC={get('statement71_only', semantic_rep, 'test_auroc_mean'):.4f}, AUPRC={get('statement71_only', semantic_rep, 'test_auprc_mean'):.4f}")
     print(f"hrv_static               : AUROC={hrv_static_auroc:.4f}, dAUROC_vs_static={hrv_static_auroc - static_auroc:+.4f}")
     print(f"statement71_static       : AUROC={semantic_static_auroc:.4f}, dAUROC_vs_static={semantic_static_auroc - static_auroc:+.4f}")
@@ -126,13 +126,18 @@ def print_training_key_summary(summary_rows: List[Dict[str, object]]) -> None:
     by_key = {(str(row["variant"]), str(row["representation"])): row for row in summary_rows}
     key_order = [
         ("static_only", "static_patient_level"),
-        ("hrv_only", "hrv_q88"),
+        ("hrv_only", f"hrv_{PATIENT_POOLING_TAG}"),
         ("statement71_only", f"{SEMANTIC_FEATURE_NAME}_wvnum{WVNUM}_{ENTRY_STATEMENT_AGG_MODE}_patient_{PATIENT_ENTRY_AGG_MODE}"),
-        ("deep_only", "deep_patient_q88"),
+        ("deep_only", f"deep_patient_{PATIENT_POOLING_TAG}"),
         ("deep_statement71_only", "deep_statement71"),
-        ("deep_hrv_static", "static_hrv_q88_deep"),
-        ("statement71_hrv_static", "static_hrv_q88_statement71"),
-        ("deep_statement71_hrv_static", "static_hrv_q88_deep_statement71"),
+        ("deep_pca64_only", f"deep_pca64_patient_{PATIENT_POOLING_TAG}"),
+        ("deep_pca64_static", f"static_plus_deep_pca64_{PATIENT_POOLING_TAG}"),
+        ("deep_pca64_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_deep_pca64"),
+        ("deep_pca64_statement71_static", f"static_deep_pca64_{PATIENT_POOLING_TAG}_statement71"),
+        ("deep_pca64_statement71_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_deep_pca64_statement71"),
+        ("deep_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_deep"),
+        ("statement71_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_statement71"),
+        ("deep_statement71_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_deep_statement71"),
         ("gated_deep_static", f"deep_static_projected{FUSION_ALIGN_DIM}_softmax_gated"),
         (
             "gated_deep_static_hrv_statement71",

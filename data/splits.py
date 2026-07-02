@@ -60,7 +60,7 @@ def print_split_distribution(train_pids, val_pids, test_pids, pid_meta):
     _split_distribution("Test", test_pids, pid_meta)
 
 
-def stratified_pid_split(pid_meta, train_size=0.7, val_size=0.15, random_state=42):
+def stratified_pid_split(pid_meta, train_size=SPLIT_TRAIN_SIZE, val_size=SPLIT_VAL_SIZE, random_state=42):
     """Patient-level split with Hospital x Outcome stratification when possible."""
     all_pids = sorted(map(str, pid_meta.keys()))
     val_ratio = val_size / (1.0 - train_size)
@@ -138,6 +138,13 @@ def stratified_pid_split(pid_meta, train_size=0.7, val_size=0.15, random_state=4
 
 def split_from_resume_if_compatible(resume_state, pid_meta):
     """Return saved split only if it exactly matches the ECG-available cohort."""
+    if not SPLIT_REUSE_STAGE1_RESUME:
+        if resume_state is not None:
+            print(
+                "[Split] Stage-1 resume split reuse is disabled; using the configured "
+                "Hospital x Outcome split instead."
+            )
+        return None
     if resume_state is None:
         return None
     required_keys = {"train_pids", "val_pids", "test_pids"}
@@ -162,7 +169,7 @@ def split_from_resume_if_compatible(resume_state, pid_meta):
 
 
 def load_or_create_split(pid_meta_ecg: Dict[str, dict], device: torch.device):
-    if os.path.exists(RESUME_CHECKPOINT_PATH):
+    if SPLIT_REUSE_EXTERNAL_RESUME and os.path.exists(RESUME_CHECKPOINT_PATH):
         try:
             state = load_resume_checkpoint(RESUME_CHECKPOINT_PATH, device)
             if state is not None and all(k in state for k in ("train_pids", "val_pids", "test_pids")):
@@ -175,9 +182,22 @@ def load_or_create_split(pid_meta_ecg: Dict[str, dict], device: torch.device):
                     return train_pids, val_pids, test_pids, "random12_resume_checkpoint"
         except Exception as exc:
             print(f"[Warning] Failed to reuse split: {exc}")
+    elif os.path.exists(RESUME_CHECKPOINT_PATH):
+        print(
+            "[Split] External resume split reuse is disabled; creating a fresh "
+            "Hospital x Outcome stratified split for the current ECG-available cohort."
+        )
 
-    train_pids, val_pids, test_pids = stratified_pid_split(pid_meta_ecg, random_state=BASE_SEED)
-    print("[Split] Created new ECG-available split with BASE_SEED.")
-    return set(map(str, train_pids)), set(map(str, val_pids)), set(map(str, test_pids)), "ecg_stratified_seed42"
-
-
+    train_pids, val_pids, test_pids = stratified_pid_split(
+        pid_meta_ecg,
+        train_size=SPLIT_TRAIN_SIZE,
+        val_size=SPLIT_VAL_SIZE,
+        random_state=BASE_SEED,
+    )
+    print("[Split] Created new ECG-available Hospital x Outcome split with BASE_SEED.")
+    return (
+        set(map(str, train_pids)),
+        set(map(str, val_pids)),
+        set(map(str, test_pids)),
+        "ecg_hospital_outcome_seed42",
+    )

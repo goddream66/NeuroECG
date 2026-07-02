@@ -592,12 +592,12 @@ def run_training_pipeline() -> None:
 
     print("\n[Stage 3] CatBoost fusion evaluation")
     base_design_specs = [
-        ("deep_only", "deep_patient_q88"),
-        ("deep_pca64_only", "deep_pca64_patient_q88"),
-        ("deep_pca64_static", "static_plus_deep_pca64"),
-        ("deep_pca64_hrv_static", "static_hrv_q88_deep_pca64"),
-        ("deep_pca64_statement71_static", "static_deep_pca64_statement71"),
-        ("deep_pca64_statement71_hrv_static", "static_hrv_q88_deep_pca64_statement71"),
+        ("deep_only", f"deep_patient_{PATIENT_POOLING_TAG}"),
+        ("deep_pca64_only", f"deep_pca64_patient_{PATIENT_POOLING_TAG}"),
+        ("deep_pca64_static", f"static_plus_deep_pca64_{PATIENT_POOLING_TAG}"),
+        ("deep_pca64_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_deep_pca64"),
+        ("deep_pca64_statement71_static", f"static_deep_pca64_{PATIENT_POOLING_TAG}_statement71"),
+        ("deep_pca64_statement71_hrv_static", f"static_hrv_{PATIENT_POOLING_TAG}_deep_pca64_statement71"),
     ]
     rows = train_eval_design_specs(base_design_specs, blocks, pid_meta, "Fusion Ablation")
     evaluated_design_specs = list(base_design_specs)
@@ -664,7 +664,7 @@ def run_training_pipeline() -> None:
         "ptbxl_pth_path": PTBXL_PTH_PATH,
         "ptbxl_mlb_path": PTBXL_MLB_PATH,
         "stage1_training_mode": "stage2_only_load_existing_stage1_checkpoint" if STAGE2_ONLY_LOAD_STAGE1_CKPT else f"segment_level_patient_label_{backbone_key}_no_mil",
-        "stage1_pooling": "none_for_training; patient_q88_only_for_stage2_feature_export",
+        "stage1_pooling": f"none_for_training; patient_{PATIENT_POOLING_TAG}_only_for_stage2_feature_export",
         "stage1_sampling": {
             "mode": "patient_balanced_random_segments_per_epoch",
             "max_segments_per_patient_per_epoch": int(STAGE1_MAX_SEGMENTS_PER_PATIENT_PER_EPOCH),

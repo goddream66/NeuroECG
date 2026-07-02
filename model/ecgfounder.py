@@ -11,10 +11,11 @@ class ECGFounderFeatureExtractor(nn.Module):
     the existing classifier_head can learn the Good/Poor segment objective.
     """
 
-    def __init__(self, ecgfounder_root=ECGFOUNDER_ROOT, checkpoint_path=ECGFOUNDER_1LEAD_CKPT):
+    def __init__(self, ecgfounder_root=ECGFOUNDER_ROOT, checkpoint_path=ECGFOUNDER_1LEAD_CKPT, load_pretrained=True):
         super().__init__()
         self.ecgfounder_root = str(ecgfounder_root)
-        self.checkpoint_path = str(checkpoint_path)
+        self.checkpoint_path = "" if checkpoint_path is None else str(checkpoint_path)
+        self.load_pretrained = bool(load_pretrained)
         try:
             from model.ecgfounder_net1d import Net1D
         except Exception as exc:
@@ -38,7 +39,12 @@ class ECGFounderFeatureExtractor(nn.Module):
             return_features=True,
         )
         self.feature_dim = int(ECGFOUNDER_FEATURE_DIM)
-        self._load_pretrained_weights()
+        if self.load_pretrained and self.checkpoint_path:
+            self._load_pretrained_weights()
+        else:
+            print("[ECGFounder] Using Net1D architecture with random initialization; no 1-lead checkpoint loaded.")
+            for p in self.backbone.dense.parameters():
+                p.requires_grad = False
 
     def _load_pretrained_weights(self):
         if not os.path.exists(self.checkpoint_path):
