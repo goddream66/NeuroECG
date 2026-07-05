@@ -22,7 +22,6 @@ The main pipeline fine-tunes or loads an ECG backbone, aggregates segment-level 
 - [Reproducibility Notes](#reproducibility-notes)
 - [Common Issues](#common-issues)
 - [Citation and Acknowledgement](#citation-and-acknowledgement)
-- [License](#license)
 
 ## Current Scope
 
@@ -152,11 +151,6 @@ Important variables:
 | Model | Variable |
 |---|---|
 | ECGFounder | `ECGFOUNDER_1LEAD_CKPT` |
-| ECG-JEPA | `ECG_JEPA_CKPT` |
-| ECG-FM | `ECGFM_CKPT` |
-| ST-MEM | `ST_MEM_CKPT` |
-| Stage-1 best checkpoint | `TRAIN_BEST_CKPT` |
-| Stage-1 resume checkpoint | `TRAIN_RESUME_CKPT` |
 
 PowerShell example:
 
@@ -190,96 +184,21 @@ The main pipeline performs:
 5. PCA compression of deep ECG embeddings.
 6. CatBoost evaluation of static, deep, and deep/static variants.
 7. Paired patient-level bootstrap comparison between `static_only` and `deep_pca64_static`.
-
-### 3. Run q Sensitivity
-
-```bash
-python run_pooling_sensitivity.py
-```
-
-Current behavior:
-
-- Uses deep ECG and static covariates only.
-- Selects q using fixed five-fold patient-level cross-validation on the train+validation cohort.
-- Keeps the test set untouched until q is fixed.
-
-### 4. Run PCA Sensitivity at q = 0.24
-
-```bash
-python run_pca_sensitivity_q024.py
-```
-
-Current behavior:
-
-- Compares raw deep features and PCA dimensions.
-- Evaluates `deep_only` and `deep_static`.
-
-Default PCA dimensions:
-
-```text
-16, 32, 64, 128, 256
-```
-
-Override dimensions:
-
-```powershell
-$env:PCA_SENS_DIMS="8,16,32,64,128,256"
-python run_pca_sensitivity_q024.py
-```
-
-### 5. Run SHAP Analysis
-
-```bash
-python run_shap_analysis.py
-```
-
-Current SHAP target:
-
-```text
-deep_pca64_static
-```
-
-The SHAP analysis uses deep PCA features plus static clinical covariates only.
-
-### 6. Plot SHAP Summary Figure
-
-```bash
-python visualizations/make_shap_combined_from_csv.py
-```
-
-Expected input files:
-
-```text
-C:\Users\34007\OneDrive\Desktop\SHAP\shap_deep_pca64_static_q24_feature_importance.csv
-C:\Users\34007\OneDrive\Desktop\SHAP\shap_deep_pca64_static_q24_per_sample_values.csv
-```
-
-Outputs:
-
-```text
-visualizations/shap_combined_top15_deep_pca64_static_q24_times.pdf
-visualizations/shap_combined_top15_deep_pca64_static_q24_times.svg
-visualizations/shap_combined_top15_deep_pca64_static_q24_times.png
-```
-
 ## Project Structure
 
 ```text
 D:/ECG_I_CARE
 |-- main.py                         # Main training entry point
 |-- process_easy_500hz.py            # ECG preprocessing and QC mask generation
-|-- run_pooling_sensitivity.py       # q sensitivity, deep/static only
-|-- run_pca_sensitivity_q024.py      # PCA sensitivity, q fixed at 0.24
-|-- run_shap_analysis.py             # SHAP analysis for deep_pca64_static
-|-- visualize_ecg_waveforms.py       # ECG waveform visualization helper
-|-- visualizations/
-|   `-- make_shap_combined_from_csv.py
+|-- processed_records_cache_first72h_500hz_singlelead_samples_w5000_s10000_qcmask_flatline_only_v1.pkl
 |-- data/
 |   |-- cache.py                     # Processed ECG cache and QC mask loading
 |   |-- datasets.py                  # ICARE segment dataset and indexing
 |   |-- splits.py                    # Patient-level train/val/test split
 |   `-- train_metadata.py            # Metadata filtering utilities
 |-- evaluation/
+|   |--feature_engineering
+|   |   |--hrv.py
 |   |-- metrics.py                   # AUROC, AUPRC, F1, sensitivity, specificity, CPC metrics
 |   `-- reports.py                   # CSV writing and summary reporting
 |-- feature/
@@ -287,11 +206,6 @@ D:/ECG_I_CARE
 |-- model/
 |   |-- ecgfounder.py                # ECGFounder adapter
 |   |-- ecgfounder_net1d.py          # ECGFounder 1D model
-|   |-- ecgfm_adapter.py             # ECG-FM adapter
-|   |-- ecg_jepa_adapter.py          # ECG-JEPA adapter
-|   |-- stmem_adapter.py             # ST-MEM adapter
-|   |-- seresnet.py                  # SE-ResNet backbone
-|   |-- convnext1d.py                # ConvNeXt1D backbone
 |   `-- heads.py                     # Classifier/projector heads
 |-- pipeline/
 |   |-- train_config.py              # Central configuration
@@ -425,30 +339,6 @@ TRAIN_BEST_CKPT
 TRAIN_RESUME_CKPT
 ```
 
-### CatBoost GPU failure
-
-If CatBoost GPU mode fails, run CatBoost on CPU or adjust GPU settings in:
-
-```text
-utils/runtime.py
-```
-
-### CUDA / PyTorch mismatch
-
-Verify:
-
-```bash
-python -c "import torch; print(torch.__version__); print(torch.cuda.is_available())"
-```
-
-### High memory use
-
-Reduce:
-
-```python
-BATCH_SIZE
-STAGE1_SEGMENT_TRAIN_BATCH_SIZE
-```
 
 ## Citation and Acknowledgement
 
@@ -458,7 +348,3 @@ Please cite the original resources used in your experiments:
 - ECGFounder if using the ECGFounder backbone.
 - ECG-FM, ECG-JEPA, ST-MEM, SE-ResNet, or ConvNeXt1D if using those baselines.
 - CatBoost for downstream patient-level classification/regression.
-
-## License
-
-No project-specific license file was found. Until a license is added, treat this repository as research code with all rights reserved by the author. Add a `LICENSE` file before public redistribution.
