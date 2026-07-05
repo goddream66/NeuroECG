@@ -11,6 +11,14 @@ This is the official PyTorch implementation of **NeuroECG**, an EEG-free deep le
 
 `NeuroECG` is a modular framework for **neurological outcome prediction in comatose patients after cardiac arrest without relying on EEG signals**.
 
+<p align="center">
+  <img src="docs/BIBM_framework.svg" alt="NeuroECG Framework" width="85%">
+</p>
+
+<p align="center">
+  <em>Figure 1: Overall architecture of the proposed NeuroECG framework.</em>
+</p>
+
 The framework adapts a pre-trained ECG foundation model to bedside ECG recordings and integrates patient-level deep ECG representations with routinely available clinical covariates.
 
 ### Key Features
@@ -47,14 +55,6 @@ https://github.com/PKUDigitalHealth/ECGFounder
 ---
 
 ## ⚙️ NeuroECG Framework
-
-<p align="center">
-  <img src="docs/BIBM_framework.png" alt="NeuroECG Framework" width="85%">
-</p>
-
-<p align="center">
-  <em>Figure 1: Overall architecture of the proposed NeuroECG framework.</em>
-</p>
 
 NeuroECG consists of two main stages.
 
@@ -166,7 +166,7 @@ NeuroECG/
 │   └── __init__.py
 │
 ├── docs/
-│   └── BIBM_framework.png   # NeuroECG framework figure
+│   └── BIBM_framework.svg   # NeuroECG framework figure
 │
 ├── evaluation/
 │   ├── metrics.py           # Evaluation metrics
