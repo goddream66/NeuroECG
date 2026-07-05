@@ -1,11 +1,6 @@
-# ECG I-CARE Deep + Static Outcome Modeling
+# NeuroECG:ECGFounder-Based Deep ECG Representation for EEG-Free Neurological Prognostication After Cardiac Arrest
 
 Patient-level outcome prediction for the I-CARE ECG cohort using deep ECG representations and static clinical covariates.
-
-This repository is currently organized around a simplified experiment setting:
-
-- ECG waveform backbone features are kept.
-- Static clinical covariates are kept.
 
 The main pipeline fine-tunes or loads an ECG backbone, aggregates segment-level ECG embeddings to patient-level features, compresses deep embeddings with PCA, and evaluates CatBoost patient-level models.
 
