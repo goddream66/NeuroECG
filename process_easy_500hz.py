@@ -10,11 +10,9 @@ import scipy.signal as signal
 import wfdb
 from tqdm import tqdm
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 配置：新输出目录，不覆盖旧实验
-# ─────────────────────────────────────────────────────────────────────────────
+
 INPUT_DIR  = "/data/xcy_group/gjj/cinc2023/cinc2023_dataset/training/"
-OUTPUT_DIR = "/data/xcy_group/gjj/cinc2023/cinc2023_dataset/processed_npy_500hz_qc_mask_flatline_only/"  # 500Hz QC mask + channel mask; no polarity; flatline-only QC
+OUTPUT_DIR = "/data/xcy_group/gjj/cinc2023/cinc2023_dataset/processed_npy_500hz_qc_mask_flatline_only/"
 LOG_FILE   = "error_log_qc_mask_500hz_flatline_only.txt"
 PROCESSES  = 3
 
@@ -27,35 +25,28 @@ TIME_BUCKETS_HOURS = (12, 24, 48, 72)
 INDEX_JSON        = "processed_index.json"
 INDEX_PKL         = "processed_index.pkl"
 
-# Segment-level quality-control thresholds（基于 500Hz 重采样后的信号）
-QC_MIN_STD        = 0.05   # 信号标准差过低 → 平线/电极脱落
-QC_MAX_CLIP_RATIO = 0.30   # 超过 30% 的点在 clip 边界 → 饱和/伪迹
-QC_HF_RATIO_MAX   = 8.0    # 高频能量(10-40Hz) / 低频能量(0.5-8Hz) > 8 → 肌电噪声
-QC_MIN_HR         = 20     # 最低心率 bpm
-QC_MAX_HR         = 300    # 最高心率 bpm
 
-# QRS clarity / R-peak confidence thresholds.
-# These are intentionally conservative for ICU bedside ECG:
-# low QRS SNR means detected peaks are not clearly above the local background.
+QC_MIN_STD        = 0.05
+QC_MAX_CLIP_RATIO = 0.30
+QC_HF_RATIO_MAX   = 8.0
+QC_MIN_HR         = 20
+QC_MAX_HR         = 300
+
+
 QC_MIN_QRS_SNR   = 1.8
 QC_MAX_RR_CV     = 0.80
 
-# Segment-level QC mask aligned with training code:
-# 500Hz 下仍保持 10 秒窗口、20 秒步长：5000 点 / 10000 点。
-# 下游训练代码中的 window_size / stride 也要对应改为 5000 / 10000。
+
 QC_WINDOW_SIZE    = 5000
 QC_STRIDE         = 10000
-QC_MIN_GOOD_RATIO = 0.05   # record-level summary only; do not discard records here
+QC_MIN_GOOD_RATIO = 0.05
 
-# Polarity normalization is disabled in this version.
-# 不再做 record-level 或 segment-level 极性反转，保留原始 ECG 波形方向。
+
 ENABLE_SEGMENT_POLARITY_NORMALIZATION = False
 SEG_POLARITY_MIN_PEAKS = 3
 SEG_POLARITY_FLIP_MARGIN = 1.05
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 工具函数（不变）
-# ─────────────────────────────────────────────────────────────────────────────
+
 def normalize_lead_name(name):
     return "".join(ch for ch in str(name).upper() if ch.isalnum())
 
@@ -126,21 +117,8 @@ def extract_header_time_fields(record_path):
         "header_comments":        [str(c) for c in comments],
     }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# [改动 1] 通道选择：优先识别 I-CARE 专有通道名，再 fallback 标准导联
-# ─────────────────────────────────────────────────────────────────────────────
+
 def choose_channel_indices(sig_names):
-    """
-    I-CARE 的 ECG 通道不是标准 12 导联，因此这里不做导联映射。
-
-    选择原则：
-    1. 优先保留明确成对的床旁 ECG 通道：ECG1+ECG2 或 ECGL+ECGR；
-    2. 如果只有单通道 ECG，则只返回这个真实通道，不在预处理阶段复制；
-    3. 如果没有 I-CARE ECG 名称，再 fallback 到标准导联优先级；
-    4. 最后 fallback 到前两个通道。
-
-    返回最多 2 个索引。单通道复制和 channel_mask 在训练 Dataset 阶段处理。
-    """
     normalized = [normalize_lead_name(name) for name in sig_names]
 
     name_to_idx = {}
@@ -183,7 +161,6 @@ def choose_channel_indices(sig_names):
 
 
 def infer_channel_metadata(selected_names):
-    """为训练阶段保存通道组合语义和有效通道 mask。"""
     norm = [normalize_lead_name(n) for n in selected_names]
     if len(norm) == 0:
         return {"channel_type": "none", "channel_mask": [0, 0], "effective_input_channels": 2}
@@ -205,7 +182,6 @@ def infer_channel_metadata(selected_names):
 
 
 def extract_hospital_from_patient_txt(record_stem):
-    """从患者 txt 中读取 Hospital A-F，写入 metadata/index 方便分医院训练和评估。"""
     time_info = parse_record_time_info(record_stem)
     pid = time_info.get("patient_id")
     if not pid:
@@ -256,16 +232,14 @@ def robust_normalize(mat, clip_value=CLIP_VALUE):
     normalized = centered / scale
     return np.clip(normalized, -clip_value, clip_value).astype(np.float32)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# [改动 2] 极性归一化：强制 R 峰朝上
-# ─────────────────────────────────────────────────────────────────────────────
+
 def normalize_polarity(mat):
+    """Normalize signal polarity independently for each channel.
+
+    Flip a channel when negative peaks dominate positive peaks.
+    The input and output shape is [time, channels].
     """
-    对每个通道独立检测：如果负向峰幅度整体大于正向峰，则翻转信号。
-    mat: [time, channels]（处理前，axes 和滤波后保持一致）
-    返回相同 shape。
-    """
-    min_dist = int(0.25 * TARGET_FS)  # R 峰间距下限（相当于 240 bpm）
+    min_dist = int(0.25 * TARGET_FS)
     for ch in range(mat.shape[1]):
         sig = mat[:, ch]
         peaks_pos, _ = signal.find_peaks( sig, distance=min_dist, prominence=0.2)
@@ -274,7 +248,7 @@ def normalize_polarity(mat):
         amp_pos = float(np.mean( sig[peaks_pos])) if len(peaks_pos) > 0 else 0.0
         amp_neg = float(np.mean(-sig[peaks_neg])) if len(peaks_neg) > 0 else 0.0
 
-        # 翻转条件：负向峰数量更多，或负向峰幅度明显更大
+
         should_flip = (
             (len(peaks_neg) > len(peaks_pos)) or
             (amp_neg > amp_pos * 1.3 and len(peaks_neg) > 0)
@@ -337,8 +311,7 @@ def _robust_segment_polarity_decision(w, fs=TARGET_FS):
             "p01": p01,
         }
 
-    # Fallback: if the negative tail is clearly larger than the positive tail,
-    # treat the segment as inverted.
+
     flip = bool(abs(p01) > abs(p99) * SEG_POLARITY_FLIP_MARGIN)
     return flip, {
         "method": "percentile_tail_asymmetry",
@@ -356,10 +329,9 @@ def apply_segment_level_polarity(
     stride=QC_STRIDE,
     segment_channel_good_mask=None,
 ):
-    """Apply polarity normalization per training-aligned segment.
+    """Apply polarity normalization to each training-aligned segment.
 
-    重要调整：如果某个通道在某个片段被 QC 判为坏片段，例如平线、饱和、无明显 QRS，
-    就不对该片段做极性翻转。这样可以避免把无规律噪声或脱落电极片段错误翻转。
+    Segments rejected by the channel-level QC mask are not flipped.
     """
     mat = np.asarray(mat, dtype=np.float32).copy()
     n_channels, n = mat.shape
@@ -417,19 +389,12 @@ def apply_segment_level_polarity(
         "method_counts": method_counts,
     }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# [改动 3] Segment-level QC mask：与训练切片 window_size/stride 对齐
-# ─────────────────────────────────────────────────────────────────────────────
+
 def _segment_channel_quality(w, fs=TARGET_FS, clip_value=CLIP_VALUE, hp_sos=None):
-    """Cheap quality check for one channel within one training-aligned segment.
+    """Evaluate channel quality within a training-aligned segment.
 
-    Flatline-only channel quality check.
-
-    当前版本只用 low_std 判断通道片段是否可用：
-        low_std = std < QC_MIN_STD
-
-    其他指标（clip_ratio、hf_proxy、hr_est、qrs_snr、rr_cv）只保留为诊断信息，
-    不参与 good/bad 判定。
+    Only low standard deviation is used for the good/bad decision.
+    Other metrics are retained for diagnostics.
     """
     w = np.asarray(w, dtype=np.float32)
     w = np.nan_to_num(w, nan=0.0, posinf=0.0, neginf=0.0)
@@ -438,14 +403,14 @@ def _segment_channel_quality(w, fs=TARGET_FS, clip_value=CLIP_VALUE, hp_sos=None
     std = float(np.std(centered))
     clip_ratio = float(np.mean(np.abs(w) >= clip_value * 0.95))
 
-    # Robust local noise estimate. MAD is less affected by occasional QRS peaks.
+
     mad = float(np.median(np.abs(centered)) + 1e-6)
 
-    # Flat / saturated checks.
+
     low_std = std < QC_MIN_STD
     high_clip = clip_ratio > QC_MAX_CLIP_RATIO
 
-    # High-frequency noise check. The high-pass filter is created once outside.
+
     if hp_sos is not None and std > 1e-6:
         try:
             w_hp = signal.sosfilt(hp_sos, centered)
@@ -456,12 +421,11 @@ def _segment_channel_quality(w, fs=TARGET_FS, clip_value=CLIP_VALUE, hp_sos=None
         hf_proxy = 0.0
     high_hf = hf_proxy > 0.70
 
-    # R-peak count and QRS clarity checks.
-    # After segment-level polarity normalization, reliable QRS should be positive.
+
     try:
         min_dist = max(int(0.20 * fs), 1)
 
-        # Adaptive threshold: avoids fixed prominence that fails across records.
+
         adaptive_prominence = max(0.20, 0.35 * mad, 0.10 * std)
         peaks, props = signal.find_peaks(
             centered,
@@ -496,10 +460,7 @@ def _segment_channel_quality(w, fs=TARGET_FS, clip_value=CLIP_VALUE, hp_sos=None
     bad_qrs_snr = bool(qrs_snr < QC_MIN_QRS_SNR)
     bad_rr_cv = bool(rr_cv > QC_MAX_RR_CV)
 
-    # Flatline-only QC:
-    # 只用“是否平线/低波动”决定该通道片段是否可用。
-    # 饱和、高频噪声、心率异常、QRS不清楚、RR-CV异常仅作为诊断字段保存，
-    # 不再影响 good_mask、channel_good_mask 和训练阶段的 quality gate。
+
     score = 0.0 if low_std else 1.0
     is_good = not low_std
 
@@ -574,7 +535,7 @@ def compute_segment_qc_mask(
             },
         }
 
-    # Create the high-pass filter once, not inside every segment loop.
+
     try:
         hp_sos = signal.butter(2, 10.0 / (fs * 0.5), btype="high", output="sos")
     except Exception:
@@ -616,18 +577,16 @@ def compute_segment_qc_mask(
             ch_scores.append(score)
             ch_stats.append(stats)
 
-        # 保存每个通道在每个片段上的质量。这样后续模型可以知道：
-        # 这个片段是两个通道都好，还是只有其中一个通道可用。
+
         if ch_good:
             channel_good_mask[i, :len(ch_good)] = np.asarray(ch_good, dtype=np.bool_)
             channel_quality_scores[i, :len(ch_scores)] = np.asarray(ch_scores, dtype=np.float32)
 
-        # If any selected ECG channel is usable, keep this segment. This avoids
-        # discarding a good single channel because a second optional channel is noisy.
+
         good_mask[i] = bool(np.any(ch_good))
         quality_scores[i] = float(np.max(ch_scores)) if ch_scores else 0.0
 
-        # Aggregate diagnostics using the best-scoring channel.
+
         best_ch = int(np.argmax(ch_scores)) if ch_scores else 0
         best_channel_index[i] = best_ch
         stats = ch_stats[best_ch] if ch_stats else {}
@@ -680,9 +639,7 @@ def compute_segment_qc_mask(
         "quality_flags": flags,
     }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 主预处理函数（整合所有改动）
-# ─────────────────────────────────────────────────────────────────────────────
+
 def preprocess_record(record_path):
     record = wfdb.rdrecord(record_path, physical=True)
     if record.p_signal is None:
@@ -693,24 +650,21 @@ def preprocess_record(record_path):
     data      = np.asarray(record.p_signal, dtype=np.float32)
     data      = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
 
-    # 通道选择：按 ECG1+ECG2、ECGL+ECGR 成对优先；单通道保留真实通道。
+
     selected_indices = choose_channel_indices(sig_names)
     selected_names   = [sig_names[idx] for idx in selected_indices]
     channel_info     = infer_channel_metadata(selected_names)
-    data             = data[:, selected_indices]          # [time, n_selected]
+    data             = data[:, selected_indices]
 
-    # 标准预处理流程
+
     data = bandpass_filter(data, fs)
     data = resample_to_target_fs(data, fs, TARGET_FS)
 
-    # 本版本不做任何极性反转：
-    # 1) 不做 record-level polarity normalization；
-    # 2) 不做 segment-level polarity normalization。
-    # 这样可以保留不同医院、不同通道原始的 QRS 方向，避免把坏片段或噪声片段错误翻转。
-    data = robust_normalize(data, CLIP_VALUE)             # [time, n_selected]
-    processed = data.T.astype(np.float32)                 # [n_selected, time]
 
-    # 只计算 segment-level QC mask，不修改波形方向。
+    data = robust_normalize(data, CLIP_VALUE)
+    processed = data.T.astype(np.float32)
+
+
     quality_info = compute_segment_qc_mask(processed, fs=TARGET_FS)
 
     n_segments = int(quality_info.get("n_qc_segments", 0))
@@ -734,9 +688,7 @@ def preprocess_record(record_path):
 
     return processed, fs, selected_names, sig_names, quality_info, channel_info
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 路径管理（不变，只是 OUTPUT_DIR 变了）
-# ─────────────────────────────────────────────────────────────────────────────
+
 def build_output_paths(record_stem):
     rel_stem  = os.path.relpath(record_stem, INPUT_DIR)
     save_path = os.path.join(OUTPUT_DIR, rel_stem + ".npy")
@@ -769,8 +721,7 @@ def outputs_are_complete(save_path, meta_path, qc_path):
     if not required_keys.issubset(metadata.keys()):
         return False
 
-    # 防止旧的带极性反转版本被误判为 complete。
-    # 同一个 OUTPUT_DIR 下重新运行时，旧 json 会被识别为不完整并重新生成。
+
     return metadata.get("preprocess_version") == "qc_mask_v7_500hz_channel_mask_channel_qc_no_polarity_flatline_only"
 
 def process_single_record(record_stem):
@@ -830,7 +781,7 @@ def process_single_record(record_stem):
                 "bandpass_hz":    [LOWCUT_HZ, HIGHCUT_HZ],
                 "time_anchor":    "segment_end_hour_from_filename",
                 "time_label_confidence": "bucket_aligned",
-                # Segment-level QC and polarity information
+
                 "qc_mask_path":      qc_path,
                 "qc_window_size":    QC_WINDOW_SIZE,
                 "qc_stride":         QC_STRIDE,
@@ -863,9 +814,7 @@ def process_single_record(record_stem):
     except Exception as exc:
         return ("error", record_stem, str(exc))
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 索引构建（新增 quality_score 字段）
-# ─────────────────────────────────────────────────────────────────────────────
+
 def build_processed_index():
     index_records = []
     for current_root, _, files in os.walk(OUTPUT_DIR):
@@ -907,7 +856,7 @@ def build_processed_index():
                 "time_label_confidence":   metadata.get("time_label_confidence"),
                 "signal_len":              signal_len,
                 "shape":                   shape,
-                # Segment-level QC fields for training / Stage 2 filtering
+
                 "quality_score":           metadata.get("quality_score", 1.0),
                 "bad_segment_ratio":       metadata.get("bad_segment_ratio", 0.0),
                 "channel_good_segment_count": metadata.get("channel_good_segment_count", []),
@@ -939,7 +888,7 @@ def collect_record_stems():
         for file_name in files:
             if not file_name.endswith("_ECG.hea"):
                 continue
-            # 跳过非患者目录（robots 等）
+
             pid = os.path.basename(root)
             if not pid.isdigit():
                 continue
