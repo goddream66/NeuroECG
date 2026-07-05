@@ -266,26 +266,6 @@ Metrics:
 | Specificity | True negative rate |
 | CPC MAE | Mean absolute CPC regression error |
 
-Manuscript table template:
-
-| Feature set | Test AUROC | Test AUPRC | F1 | Sensitivity | Specificity |
-|---|---:|---:|---:|---:|---:|
-| Static only | fill from `*_summary.csv` | fill | fill | fill | fill |
-| Deep ECG only | fill from `*_summary.csv` | fill | fill | fill | fill |
-| Deep PCA64 only | fill from `*_summary.csv` | fill | fill | fill | fill |
-| Deep PCA64 + static | fill from `*_summary.csv` | fill | fill | fill | fill |
-
-For the incremental value of the deep/static model over static covariates alone, use:
-
-```text
-*_static_vs_neuroecg_paired_bootstrap.csv
-```
-
-This file reports ensemble AUROC confidence intervals and the paired bootstrap CI for:
-
-```text
-Delta AUROC = AUROC(deep_pca64_static) - AUROC(static_only)
-```
 
 ## Reproducibility Notes
 
