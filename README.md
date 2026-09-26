@@ -1,6 +1,5 @@
 ﻿# NeuroECG: ECGFounder-Based Deep ECG Representation for EEG-Free Neurological Prognostication from Bedside ECG
 
-[![PyTorch](https://img.shields.io/badge/PyTorch-v2.1.0-EE4C2C.svg?style=flat-square\&logo=pytorch)](https://pytorch.org/)
 [![Conference](https://img.shields.io/badge/BIBM-2026-brightgreen.svg?style=flat-square)](https://ieeebibm.org/)
 
 This is the official PyTorch implementation of **NeuroECG**, an EEG-free deep learning framework for neurological prognostication after cardiac arrest using bedside monitoring ECG and clinical covariates.
