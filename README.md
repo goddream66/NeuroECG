@@ -87,11 +87,6 @@ Classifier: CatBoost
 ## 🚀 Quick Start
 
 ### 1. Obtain the Source Code
-
-The anonymous source code for double-blind review is available at:
-
-https://anonymous.4open.science/r/NeuroECG-2DE2/
-
 Enter the project directory:
 
 ```bash
